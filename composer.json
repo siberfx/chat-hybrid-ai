@@ -1,0 +1,63 @@
+{
+    "name": "siberfx/chat-hybrid-ai",
+    "description": "API-first hybrid chat for Laravel: floating chat bubble, admin inbox, AI agent replies with human handoff, and email transcripts.",
+    "keywords": [
+        "laravel",
+        "chat",
+        "live-chat",
+        "support",
+        "ai",
+        "claude",
+        "messenger"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Siberfx",
+            "email": "info@siberfx.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "anthropic-ai/sdk": "^0.59",
+        "illuminate/contracts": "^13.30",
+        "illuminate/database": "^13.30",
+        "illuminate/http": "^13.30",
+        "illuminate/mail": "^13.30",
+        "illuminate/queue": "^13.30",
+        "illuminate/support": "^13.30"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^11.0",
+        "phpunit/phpunit": "^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Siberfx\\ChatHybridAi\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Siberfx\\ChatHybridAi\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Siberfx\\ChatHybridAi\\ChatHybridAiServiceProvider"
+            ],
+            "aliases": {
+                "HybridChat": "Siberfx\\ChatHybridAi\\Facades\\HybridChat"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
