@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 - 2026-10-19
+
+- Expanded README with full examples: curl walkthroughs of the visitor and admin APIs, Sanctum tokens, webhook receivers (Laravel, Node), a custom driver, React and Vue custom UIs and admin inboxes, Echo listeners, events, custom models, and a full `.env` reference.
+- CI uses `actions/checkout@v5`.
+
 ## 1.0.0 - 2026-10-19
 
 First stable release.
