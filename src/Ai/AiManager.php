@@ -3,9 +3,8 @@
 namespace Siberfx\ChatHybridAi\Ai;
 
 use Illuminate\Support\Manager;
-use Siberfx\ChatHybridAi\Ai\Drivers\AnthropicDriver;
+use Siberfx\ChatHybridAi\Ai\Drivers\LaravelAiDriver;
 use Siberfx\ChatHybridAi\Ai\Drivers\NullDriver;
-use Siberfx\ChatHybridAi\Ai\Drivers\OpenAiDriver;
 use Siberfx\ChatHybridAi\Ai\Drivers\WebhookDriver;
 use Siberfx\ChatHybridAi\Contracts\AiAgent;
 
@@ -24,14 +23,9 @@ class AiManager extends Manager
         return (array) $this->config->get("chat-hybrid-ai.ai.drivers.{$name}", []);
     }
 
-    protected function createAnthropicDriver(): AiAgent
+    protected function createLaravelAiDriver(): AiAgent
     {
-        return new AnthropicDriver($this->driverConfig('anthropic'));
-    }
-
-    protected function createOpenaiDriver(): AiAgent
-    {
-        return new OpenAiDriver($this->driverConfig('openai'));
+        return new LaravelAiDriver($this->driverConfig('laravel-ai'));
     }
 
     protected function createWebhookDriver(): AiAgent

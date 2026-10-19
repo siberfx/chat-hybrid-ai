@@ -66,6 +66,7 @@
         .msg.ai .text { background: var(--ai-bg); color: var(--text); border-bottom-right-radius: 4px; }
         .msg.agent .who, .msg.ai .who { text-align: right; }
         .system { align-self: center; font-size: 12px; color: var(--muted); }
+        .msg .tool { font-size: 11px; color: var(--muted); margin: 3px 4px 0; text-align: right; font-family: ui-monospace, monospace; word-break: break-all; }
         .details { border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; background: var(--panel); font-size: 13px; }
         .details dt { color: var(--muted); font-size: 12px; margin-top: 10px; }
         .details dd { margin: 2px 0 0; word-break: break-word; }
@@ -291,7 +292,7 @@
 
         var d = $('details');
         d.innerHTML = '';
-        var rows = [['ID', c.id], ['Email', c.visitor_email], ['Started', new Date(c.created_at).toLocaleString()]];
+        var rows = [['ID', c.id], ['Email', c.visitor_email], ['Signed in as', c.visitor_id ? 'user #' + c.visitor_id : ''], ['Started', new Date(c.created_at).toLocaleString()]];
         Object.keys(c.meta || {}).forEach(function (k) { rows.push([k, c.meta[k]]); });
         rows.forEach(function (r) {
             if (!r[1]) return;
@@ -313,6 +314,10 @@
             var wrap = text('div', 'msg ' + m.sender_type);
             wrap.appendChild(text('div', 'who', m.sender_name + ' · ' + new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
             wrap.appendChild(text('div', 'text', m.body));
+            (m.tools || []).forEach(function (t) {
+                var args = Object.keys(t.arguments || {}).map(function (k) { return k + ': ' + JSON.stringify(t.arguments[k]); }).join(', ');
+                wrap.appendChild(text('div', 'tool', '🔎 ' + t.name + '(' + args + ')'));
+            });
             box.appendChild(wrap);
         });
         if (atBottom || messages.length) box.scrollTop = box.scrollHeight;

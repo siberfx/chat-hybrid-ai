@@ -1,6 +1,6 @@
 {
     "name": "siberfx/chat-hybrid-ai",
-    "description": "API-first hybrid chat for Laravel: floating chat bubble, admin inbox, AI agent replies with human handoff, and email transcripts.",
+    "description": "API-first hybrid chat for Laravel: chat bubble, admin inbox, AI agents (Laravel AI SDK) that can search and check your data, human handoff, email transcripts, React and Vue widgets.",
     "keywords": [
         "laravel",
         "chat",
@@ -8,7 +8,13 @@
         "support",
         "ai",
         "claude",
-        "messenger"
+        "messenger",
+        "laravel-ai",
+        "openai",
+        "gemini",
+        "react",
+        "vue",
+        "chatbot"
     ],
     "license": "MIT",
     "authors": [
@@ -20,17 +26,21 @@
     ],
     "require": {
         "php": "^8.3",
-        "anthropic-ai/sdk": "^0.59",
         "illuminate/contracts": "^13.30",
         "illuminate/database": "^13.30",
         "illuminate/http": "^13.30",
         "illuminate/mail": "^13.30",
         "illuminate/queue": "^13.30",
-        "illuminate/support": "^13.30"
+        "illuminate/support": "^13.30",
+        "laravel/ai": "^1.2"
     },
     "require-dev": {
         "orchestra/testbench": "^11.0",
         "phpunit/phpunit": "^12.0"
+    },
+    "suggest": {
+        "laravel/sanctum": "Token-authenticated admin API (api/chat-admin)",
+        "laravel/scout": "Full-text search for the SearchRecords tool"
     },
     "autoload": {
         "psr-4": {

@@ -2,7 +2,7 @@ import { onBeforeUnmount, onMounted, shallowRef } from 'vue';
 import { ChatSession } from '../client/hybrid-chat.js';
 
 /**
- * const { state, send, requestHuman, ... } = useHybridChat({ api: '/api/chat', name, email, meta });
+ * const { state, send, requestHuman, ... } = useHybridChat({ api: '/api/chat', name, email, meta, identity });
  * state.value.messages, state.value.conversation, ...
  */
 export function useHybridChat(options = {}) {

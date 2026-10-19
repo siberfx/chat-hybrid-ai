@@ -20,6 +20,9 @@ use Siberfx\ChatHybridAi\ChatManager;
  * @method static \Siberfx\ChatHybridAi\ChatManager extendAi(string $driver, \Closure $callback)
  * @method static \Siberfx\ChatHybridAi\Ai\AiManager ai()
  * @method static bool aiEnabled()
+ * @method static \Siberfx\ChatHybridAi\ChatManager tools(\Closure|array $tools)
+ * @method static array toolsFor(\Siberfx\ChatHybridAi\Ai\ChatContext $context)
+ * @method static string identity(\Illuminate\Database\Eloquent\Model|int|string $user, ?int $ttl = null)
  *
  * @see ChatManager
  */

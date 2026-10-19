@@ -16,6 +16,11 @@ class MessageResource extends JsonResource
             'sender_name' => $this->senderName(),
             'body' => $this->body,
             'event' => $this->meta['event'] ?? null,
+            // What the AI looked up for this reply: admins only.
+            'tools' => $this->when(
+                $request->routeIs('chat-hybrid-ai.admin.*', 'chat-hybrid-ai.admin-api.*'),
+                fn () => $this->meta['tools'] ?? [],
+            ),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

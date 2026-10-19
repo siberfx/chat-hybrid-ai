@@ -5,6 +5,7 @@ namespace Siberfx\ChatHybridAi\Tests;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Ai\AiServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Siberfx\ChatHybridAi\ChatHybridAiServiceProvider;
 use Siberfx\ChatHybridAi\Facades\HybridChat;
@@ -17,7 +18,7 @@ abstract class TestCase extends Orchestra
 
     protected function getPackageProviders($app): array
     {
-        return [ChatHybridAiServiceProvider::class];
+        return [AiServiceProvider::class, ChatHybridAiServiceProvider::class];
     }
 
     protected function defineEnvironment($app): void
@@ -37,6 +38,25 @@ abstract class TestCase extends Orchestra
             $table->string('email')->unique();
             $table->string('password')->nullable();
             $table->boolean('is_admin')->default(false);
+            $table->timestamps();
+        });
+
+        Schema::create('products', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->decimal('price', 8, 2);
+            $table->decimal('cost', 8, 2)->nullable();
+            $table->boolean('published')->default(true);
+            $table->timestamps();
+        });
+
+        Schema::create('orders', function (Blueprint $table) {
+            $table->id();
+            $table->string('number')->unique();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('email');
+            $table->string('status');
             $table->timestamps();
         });
 

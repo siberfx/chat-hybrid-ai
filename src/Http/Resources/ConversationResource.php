@@ -20,6 +20,7 @@ class ConversationResource extends JsonResource
             'mode' => $this->mode->value,
             'visitor_name' => $this->visitor_name,
             'visitor_email' => $this->visitor_email,
+            'identified' => $this->visitor_id !== null,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

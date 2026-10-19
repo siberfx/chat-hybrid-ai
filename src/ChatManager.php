@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Siberfx\ChatHybridAi\Ai\AiManager;
+use Siberfx\ChatHybridAi\Ai\ChatContext;
 use Siberfx\ChatHybridAi\Enums\ConversationMode;
 use Siberfx\ChatHybridAi\Enums\ConversationStatus;
 use Siberfx\ChatHybridAi\Enums\SenderType;
@@ -21,6 +22,7 @@ use Siberfx\ChatHybridAi\Mail\TranscriptMail;
 use Siberfx\ChatHybridAi\Models\Conversation;
 use Siberfx\ChatHybridAi\Models\Message;
 use Siberfx\ChatHybridAi\Support\ChatModels;
+use Siberfx\ChatHybridAi\Support\VisitorIdentity;
 
 /**
  * Every state change of a conversation goes through here, so the HTTP layer,
@@ -28,6 +30,9 @@ use Siberfx\ChatHybridAi\Support\ChatModels;
  */
 class ChatManager
 {
+    /** @var list<Closure|array> */
+    protected array $tools = [];
+
     public function __construct(protected AiManager $ai) {}
 
     public function ai(): AiManager
@@ -45,13 +50,48 @@ class ChatManager
         return $this;
     }
 
+    /**
+     * Give the AI agent tools (laravel/ai Tool instances): an array, or a
+     * closure that receives the ChatContext and returns an array.
+     */
+    public function tools(Closure|array $tools): static
+    {
+        $this->tools[] = $tools;
+
+        return $this;
+    }
+
+    /**
+     * The tools for one reply: ai.tools from the config, then registered ones.
+     *
+     * @return list<\Laravel\Ai\Contracts\Tool|\Laravel\Ai\Providers\Tools\ProviderTool>
+     */
+    public function toolsFor(ChatContext $context): array
+    {
+        $tools = array_map(fn (string $class) => app()->make($class), (array) config('chat-hybrid-ai.ai.tools', []));
+
+        foreach ($this->tools as $registered) {
+            array_push($tools, ...array_values($registered instanceof Closure ? (array) $registered($context) : $registered));
+        }
+
+        return $tools;
+    }
+
+    /**
+     * A signed identity for a logged-in user, for the bubble or your own widget.
+     */
+    public function identity(Model|int|string $user, ?int $ttl = null): string
+    {
+        return VisitorIdentity::sign($user, $ttl);
+    }
+
     public function aiEnabled(): bool
     {
         return (bool) config('chat-hybrid-ai.ai.enabled') && config('chat-hybrid-ai.ai.driver') !== 'null';
     }
 
     /**
-     * @param  array{visitor_name?: ?string, visitor_email?: ?string, subject?: ?string, meta?: ?array}  $attributes
+     * @param  array{visitor_name?: ?string, visitor_email?: ?string, visitor_id?: ?string, subject?: ?string, meta?: ?array}  $attributes
      */
     public function start(array $attributes = [], ?string $firstMessage = null): Conversation
     {
@@ -61,6 +101,7 @@ class ChatManager
         $conversation = $class::create([
             'visitor_name' => $attributes['visitor_name'] ?? null,
             'visitor_email' => $attributes['visitor_email'] ?? null,
+            'visitor_id' => isset($attributes['visitor_id']) ? (string) $attributes['visitor_id'] : null,
             'subject' => $attributes['subject'] ?? null,
             'meta' => $attributes['meta'] ?? null,
             'mode' => $this->aiEnabled() ? ConversationMode::Ai : ConversationMode::Waiting,

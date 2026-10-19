@@ -9,10 +9,10 @@ const STATUS = {
 };
 
 /**
- * <ChatWidget api="https://your-app.com/api/chat" name={user?.name} email={user?.email} meta={{ plan: 'pro' }} />
+ * <ChatWidget api="https://your-app.com/api/chat" name={user?.name} email={user?.email} meta={{ plan: 'pro' }} identity={chatIdentity} />
  */
-export default function ChatWidget({ api = '/api/chat', name = null, email = null, meta = {} }) {
-    const chat = useHybridChat({ api, name, email, meta });
+export default function ChatWidget({ api = '/api/chat', name = null, email = null, meta = {}, identity = null }) {
+    const chat = useHybridChat({ api, name, email, meta, identity });
     const [text, setText] = useState('');
     const [visitor, setVisitor] = useState({ name: name ?? '', email: email ?? '' });
     const list = useRef(null);

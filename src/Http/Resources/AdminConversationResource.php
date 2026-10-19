@@ -17,6 +17,7 @@ class AdminConversationResource extends JsonResource
             'mode' => $this->mode->value,
             'visitor_name' => $this->visitor_name,
             'visitor_email' => $this->visitor_email,
+            'visitor_id' => $this->visitor_id,
             'subject' => $this->subject,
             'meta' => $this->meta,
             'assignee' => $this->whenLoaded('assignee', fn () => $this->assignee ? [

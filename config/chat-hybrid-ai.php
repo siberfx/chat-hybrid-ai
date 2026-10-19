@@ -7,12 +7,14 @@ return [
     | Models & tables
     |--------------------------------------------------------------------------
     | Swap in your own models (they should extend the package models) and
-    | table names. The agent model is the user model of your admins.
+    | table names. The agent model is the user model of your admins; the
+    | visitor model is the user model of signed-in visitors.
     */
     'models' => [
         'conversation' => Siberfx\ChatHybridAi\Models\Conversation::class,
         'message' => Siberfx\ChatHybridAi\Models\Message::class,
         'agent' => null, // defaults to auth.providers.users.model
+        'visitor' => null, // defaults to auth.providers.users.model
     ],
 
     'tables' => [
@@ -74,13 +76,14 @@ return [
     | conversation to a human by answering with the handoff marker, the visitor
     | can ask for a human, and admins can take over at any time.
     |
-    | Drivers: anthropic, openai (any OpenAI-compatible endpoint), webhook
-    | (your own agent service), null. Or register your own with
+    | Drivers: laravel-ai (the Laravel AI SDK: Anthropic, OpenAI, Gemini,
+    | Groq, Mistral, Ollama, OpenRouter, ...), webhook (your own agent
+    | service), null. Or register your own with
     | HybridChat::extendAi('name', fn ($app, $config) => new MyDriver).
     */
     'ai' => [
         'enabled' => env('HYBRID_CHAT_AI', true),
-        'driver' => env('HYBRID_CHAT_AI_DRIVER', 'anthropic'),
+        'driver' => env('HYBRID_CHAT_AI_DRIVER', 'laravel-ai'),
         'queue' => env('HYBRID_CHAT_AI_QUEUE'), // null = default queue
         'history_limit' => 30,
         'handoff_marker' => '[[HANDOFF]]',
@@ -92,20 +95,36 @@ return [
             ."will take over and end your reply with [[HANDOFF]]."
         ),
 
-        'drivers' => [
-            'anthropic' => [
-                'api_key' => env('ANTHROPIC_API_KEY'),
-                'model' => env('HYBRID_CHAT_ANTHROPIC_MODEL', 'claude-opus-5-5'),
-                'max_tokens' => 4000,
-                'effort' => 'low', // chat replies rarely need deep thinking
-                'fallbacks' => 'default', // server-side fallback when the model declines; null to disable
-            ],
+        /*
+        | Tools let the agent read your data: search products, look up the
+        | visitor's own order, check a coupon. Class names here are resolved
+        | from the container; register configured instances with
+        | HybridChat::tools([...]) in a service provider. They work with the
+        | "laravel-ai" driver. Any laravel/ai Tool or provider tool fits.
+        */
+        'tools' => [
+            // App\Ai\Tools\OrderStatus::class,
+        ],
 
-            'openai' => [
-                'api_key' => env('HYBRID_CHAT_OPENAI_KEY'),
-                'base_url' => env('HYBRID_CHAT_OPENAI_URL', 'https://api.openai.com/v1'),
-                'model' => env('HYBRID_CHAT_OPENAI_MODEL'),
-                'max_tokens' => 1000,
+        'drivers' => [
+            /*
+            | The Laravel AI SDK: providers and keys live in config/ai.php.
+            | List several providers to fail over between them, in order
+            | (on rate limits, overloads, or exhausted credits).
+            */
+            'laravel-ai' => [
+                'providers' => array_values(array_filter(explode(',', (string) env('HYBRID_CHAT_AI_PROVIDERS', '')))), // empty = ai.default
+                'models' => [
+                    // 'anthropic' => 'claude-opus-5-5',
+                    // 'openai' => 'gpt-5-mini',
+                ], // per provider; unset = the provider's default model
+                'max_tokens' => 4000,
+                'max_steps' => 5, // model round trips per reply, tool calls included
+                'timeout' => 60,
+                'handoff_tool' => true, // the agent can call request_human
+                'provider_options' => [
+                    'anthropic' => ['output_config' => ['effort' => 'low']], // chat rarely needs deep thinking
+                ],
             ],
 
             'webhook' => [
@@ -114,6 +133,18 @@ return [
                 'timeout' => 30,
             ],
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Visitor identity
+    |--------------------------------------------------------------------------
+    | <x-chat-hybrid-ai-bubble :identify="auth()->user()" /> signs the user's
+    | id with the app key. Tools trust only that id, never the name, email or
+    | meta a visitor sends. A chat started with a valid identity keeps it.
+    */
+    'identity' => [
+        'ttl' => 86400, // seconds a signed identity stays valid
     ],
 
     /*

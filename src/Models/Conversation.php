@@ -20,6 +20,7 @@ use Siberfx\ChatHybridAi\Support\ChatModels;
  * @property string $token
  * @property ?string $visitor_name
  * @property ?string $visitor_email
+ * @property ?string $visitor_id  verified id of a signed-in visitor
  * @property ?string $subject
  * @property ConversationStatus $status
  * @property ConversationMode $mode

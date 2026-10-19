@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ChatSession } from '../client/hybrid-chat.js';
 
 /**
- * const chat = useHybridChat({ api: '/api/chat', name, email, meta });
+ * const chat = useHybridChat({ api: '/api/chat', name, email, meta, identity });
  * chat.messages, chat.conversation, chat.send('Hi'), chat.requestHuman(), ...
  */
 export function useHybridChat(options = {}) {

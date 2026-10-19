@@ -27,6 +27,7 @@ class WebhookDriver implements AiAgent
                 'id' => $conversation->uuid,
                 'visitor_name' => $conversation->visitor_name,
                 'visitor_email' => $conversation->visitor_email,
+                'visitor_id' => $conversation->visitor_id,
                 'subject' => $conversation->subject,
                 'meta' => $conversation->meta,
             ],

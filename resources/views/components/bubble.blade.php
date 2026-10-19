@@ -5,6 +5,7 @@
     @if($email) data-email="{{ $email }}" @endif
     @if($color) data-color="{{ $color }}" @endif
     @if($title) data-title="{{ $title }}" @endif
+    @if($identity = $identity()) data-identity="{{ $identity }}" @endif
     @if($meta) data-meta="{{ json_encode($meta) }}" @endif
     defer
 ></script>

@@ -9,6 +9,7 @@ use Siberfx\ChatHybridAi\ChatManager;
 use Siberfx\ChatHybridAi\Http\Resources\ConversationResource;
 use Siberfx\ChatHybridAi\Http\Resources\MessageResource;
 use Siberfx\ChatHybridAi\Models\Conversation;
+use Siberfx\ChatHybridAi\Support\VisitorIdentity;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -51,11 +52,13 @@ class WidgetController extends Controller
             'message' => ['nullable', 'string', 'max:'.$this->maxLength()],
             'meta' => ['nullable', 'array'],
             'meta.*' => ['nullable', 'string', 'max:500'],
+            'identity' => ['nullable', 'string', 'max:500'],
         ]);
 
         $conversation = $this->chat->start([
             'visitor_name' => $data['name'] ?? null,
             'visitor_email' => $data['email'] ?? null,
+            'visitor_id' => VisitorIdentity::verify($data['identity'] ?? null),
             'subject' => $data['subject'] ?? null,
             'meta' => array_filter([
                 ...($data['meta'] ?? []),
@@ -87,11 +90,14 @@ class WidgetController extends Controller
         $data = $request->validate([
             'name' => ['nullable', 'string', 'max:120'],
             'email' => ['nullable', 'email', 'max:190'],
+            'identity' => ['nullable', 'string', 'max:500'],
         ]);
 
         $conversation->update(array_filter([
             'visitor_name' => $data['name'] ?? null,
             'visitor_email' => $data['email'] ?? null,
+            // A guest who signs in mid-chat; an identified chat never changes hands.
+            'visitor_id' => $conversation->visitor_id === null ? VisitorIdentity::verify($data['identity'] ?? null) : null,
         ]));
 
         return new ConversationResource($conversation);

@@ -53,7 +53,7 @@ export class ChatClient {
 
     config() { return this.call('GET', '/config'); }
 
-    /** { name?, email?, subject?, message?, meta? } → { token, conversation, messages } */
+    /** { name?, email?, subject?, message?, meta?, identity? } → { token, conversation, messages } */
     async start(data = {}) {
         const json = await this.call('POST', '/conversations', data);
         this.id = json.conversation.id;
@@ -62,7 +62,7 @@ export class ChatClient {
     }
 
     show() { return this.call('GET', this.conv()); }
-    update(data) { return this.call('PATCH', this.conv(), data); }
+    update(data) { return this.call('PATCH', this.conv(), data); } // { name?, email?, identity? }
     messages(after = 0) { return this.call('GET', this.conv(`/messages?after=${after}`)); }
     send(body) { return this.call('POST', this.conv('/messages'), { body }); }
     markRead() { return this.call('POST', this.conv('/read')); }
@@ -127,9 +127,13 @@ const initialState = {
  * React's useSyncExternalStore or a Vue shallowRef.
  */
 export class ChatSession {
-    constructor({ api = '/api/chat', name = null, email = null, meta = {}, storage = globalThis.localStorage } = {}) {
+    /**
+     * identity: the signed id from HybridChat::identity($user), so the AI's
+     * tools can look up the logged-in user's own records.
+     */
+    constructor({ api = '/api/chat', name = null, email = null, meta = {}, identity = null, storage = globalThis.localStorage } = {}) {
         this.client = new ChatClient({ api });
-        this.visitor = { name, email, meta };
+        this.visitor = { name, email, meta, identity };
         this.storage = storage;
         this.storageKey = `hybrid-chat:${api}`;
         this.state = initialState;
@@ -196,6 +200,7 @@ export class ChatSession {
                     email: visitor.email || this.visitor.email || null,
                     message: body,
                     meta: this.visitor.meta,
+                    identity: this.visitor.identity,
                 });
                 this.save();
                 this.ingest(json);

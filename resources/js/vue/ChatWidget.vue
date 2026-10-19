@@ -1,5 +1,5 @@
 <!--
-  <ChatWidget api="https://your-app.com/api/chat" :name="user?.name" :email="user?.email" :meta="{ plan: 'pro' }" />
+  <ChatWidget api="https://your-app.com/api/chat" :name="user?.name" :email="user?.email" :meta="{ plan: 'pro' }" :identity="chatIdentity" />
 -->
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue';
@@ -11,6 +11,7 @@ const props = defineProps({
     name: { type: String, default: null },
     email: { type: String, default: null },
     meta: { type: Object, default: () => ({}) },
+    identity: { type: String, default: null },
 });
 
 const STATUS = {
@@ -19,7 +20,7 @@ const STATUS = {
     human: 'Chatting with our team',
 };
 
-const chat = useHybridChat({ api: props.api, name: props.name, email: props.email, meta: props.meta });
+const chat = useHybridChat({ api: props.api, name: props.name, email: props.email, meta: props.meta, identity: props.identity });
 const state = chat.state;
 const text = ref('');
 const visitor = reactive({ name: props.name ?? '', email: props.email ?? '' });

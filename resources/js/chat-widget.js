@@ -3,7 +3,7 @@
  *
  * <script src="https://your-app.test/api/chat/widget.js" defer></script>
  * Optional data-* attributes: data-api, data-name, data-email, data-color,
- * data-title, data-meta (JSON). window.HybridChat exposes open/close/toggle.
+ * data-title, data-meta (JSON), data-identity (signed, see HybridChat::identity). window.HybridChat exposes open/close/toggle.
  */
 (function () {
     'use strict';
@@ -273,6 +273,7 @@
                 email: ui.emailInput.value || ds.email || null,
                 message: body,
                 meta: meta,
+                identity: ds.identity || null,
             }).then(function (json) {
                 state.token = json.token;
                 state.conversation = json.conversation;

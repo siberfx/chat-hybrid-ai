@@ -8,7 +8,8 @@ API-first live chat for Laravel 13.30+ (PHP 8.3+). An AI agent answers first, an
 
 - **Chat bubble** for any site: one `<script>` tag, no build step, Shadow DOM so your CSS can't break it.
 - **Admin inbox** at `/chat-admin` with filters (needs a human, mine, with AI, unread, closed), search, and visitor details.
-- **AI agent** answers first. It can hand off to a human, the visitor can ask for one, and an admin can take over or hand back at any time. Drivers: Claude (official Anthropic SDK), any OpenAI-compatible API, your own webhook agent, or a custom PHP driver.
+- **AI agent** answers first, through the [Laravel AI SDK](https://laravel.com/docs/ai-sdk): Anthropic, OpenAI, Gemini, Groq, Mistral, DeepSeek, xAI, Ollama, OpenRouter, Azure, Bedrock and more, with failover between providers. It can hand off to a human, the visitor can ask for one, and an admin can take over or hand back at any time. A webhook driver and custom PHP drivers are also supported.
+- **AI that uses your data**: give the agent tools to search your products, look up a visitor's own order, or check a coupon, without letting it write SQL. Signed visitor identities make sure it only shows people their own records.
 - **Email transcripts**: the visitor can email the chat to themselves, admins can send it to any address, and it can go out automatically on close.
 - **REST API** for everything: a public visitor API, plus an admin API that works with the session or with Sanctum tokens. Use it to build your own front end or mobile app.
 - **React and Vue** widgets and hooks ship with the package, built on a dependency-free JS client.
@@ -22,6 +23,7 @@ API-first live chat for Laravel 13.30+ (PHP 8.3+). An AI agent answers first, an
 - [The chat bubble](#the-chat-bubble)
 - [The admin inbox](#the-admin-inbox)
 - [AI agents](#ai-agents)
+- [Let the AI use your data](#let-the-ai-use-your-data)
 - [Handoff to a human](#handoff-to-a-human)
 - [Email transcripts](#email-transcripts)
 - [REST API: visitor](#rest-api-visitor)
@@ -36,6 +38,7 @@ API-first live chat for Laravel 13.30+ (PHP 8.3+). An AI agent answers first, an
 - [Custom models and tables](#custom-models-and-tables)
 - [Configuration reference](#configuration-reference)
 - [Security](#security)
+- [Upgrading from 1.x](#upgrading-from-1x)
 - [Testing](#testing)
 
 ## Requirements
@@ -43,6 +46,7 @@ API-first live chat for Laravel 13.30+ (PHP 8.3+). An AI agent answers first, an
 - PHP 8.3+
 - Laravel 13.30+
 - A queue worker (AI replies and emails run in queued jobs)
+- [laravel/ai](https://github.com/laravel/ai), installed with the package
 - Optional: [Laravel Sanctum](https://laravel.com/docs/sanctum) for the token admin API, and Reverb or Pusher for real-time updates
 
 ## Installation
@@ -53,6 +57,12 @@ php artisan migrate
 ```
 
 This creates two tables: `chat_conversations` and `chat_messages`.
+
+AI providers and their keys live in laravel/ai's `config/ai.php`. Publish it to change providers, URLs or the default:
+
+```bash
+php artisan vendor:publish --provider="Laravel\Ai\AiServiceProvider"
+```
 
 Publish only what you want to change:
 
@@ -76,7 +86,7 @@ A working chat with Claude and a human fallback takes four steps.
 **1. `.env`**
 
 ```dotenv
-HYBRID_CHAT_AI_DRIVER=anthropic
+HYBRID_CHAT_AI_PROVIDERS=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 HYBRID_CHAT_NOTIFY=support@example.com   # emailed when a chat needs a person
 ```
@@ -98,9 +108,15 @@ public function boot(): void
 <body>
     {{ $slot }}
 
-    <x-chat-hybrid-ai-bubble :name="auth()->user()?->name" :email="auth()->user()?->email" />
+    <x-chat-hybrid-ai-bubble
+        :name="auth()->user()?->name"
+        :email="auth()->user()?->email"
+        :identify="auth()->user()"
+    />
 </body>
 ```
+
+`:identify` signs the logged-in user's id, so [AI tools](#let-the-ai-use-your-data) can safely look up that user's own records.
 
 **4. Answer chats** at `https://your-app.com/chat-admin`.
 
@@ -118,13 +134,16 @@ Every attribute is optional:
 <x-chat-hybrid-ai-bubble
     :name="auth()->user()?->name"
     :email="auth()->user()?->email"
-    :meta="['plan' => 'pro', 'order' => '#1042', 'user_id' => (string) auth()->id()]"
+    :identify="auth()->user()"
+    :meta="['plan' => 'pro', 'page_type' => 'pricing']"
     color="#0f766e"
     title="Ask Acme"
 />
 ```
 
 `meta` is a flat list of string values. The AI agent receives it, and admins see it next to the conversation. The bubble also records the visitor's IP, user agent, and the page they started on.
+
+Name, email and `meta` come from the browser, so a visitor can change them. Only `:identify` is trusted: it is signed with your app key and expires after `identity.ttl` (24 hours by default). See [visitor identity](#visitor-identity).
 
 ### On any other site
 
@@ -154,6 +173,7 @@ With options:
 | `data-name`, `data-email` | Prefill the visitor; with a name, the intro form is skipped |
 | `data-color`, `data-title` | Override the configured colour and title |
 | `data-meta` | JSON object of extra context |
+| `data-identity` | a signed identity from `HybridChat::identity($user)` |
 
 ### Control it from JavaScript
 
@@ -216,37 +236,66 @@ Admins can filter, search, reply, take over, hand back to the AI, close, reopen,
 
 New conversations start with the AI when `HYBRID_CHAT_AI=true` (the default). Pick a driver with `HYBRID_CHAT_AI_DRIVER`.
 
-### Claude (default)
+### Laravel AI SDK (default)
+
+The default `laravel-ai` driver runs on the [Laravel AI SDK](https://laravel.com/docs/ai-sdk). Providers and API keys are configured in `config/ai.php`. Pick the provider(s) for the chat:
 
 ```dotenv
-HYBRID_CHAT_AI_DRIVER=anthropic
+# One provider
+HYBRID_CHAT_AI_PROVIDERS=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
-HYBRID_CHAT_ANTHROPIC_MODEL=claude-opus-5-5   # optional, this is the default
+
+# Several: tried in order when one is rate-limited, overloaded or out of credits
+HYBRID_CHAT_AI_PROVIDERS=anthropic,openai,gemini
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...
 ```
 
-The driver uses the official `anthropic-ai/sdk` at `effort: low`, which suits chat. It also turns on the server-side refusal fallback (`fallbacks: "default"`): if the model declines a message, the API retries on a fallback model. If that one declines too, the chat is handed to a human. To turn the fallback off, set `ai.drivers.anthropic.fallbacks` to `null`.
+Leave `HYBRID_CHAT_AI_PROVIDERS` empty to use `ai.default`. Each provider uses its default model unless you choose one in `config/chat-hybrid-ai.php`:
 
-### Any OpenAI-compatible API
-
-```dotenv
-HYBRID_CHAT_AI_DRIVER=openai
-
-# OpenAI
-HYBRID_CHAT_OPENAI_URL=https://api.openai.com/v1
-HYBRID_CHAT_OPENAI_KEY=sk-...
-HYBRID_CHAT_OPENAI_MODEL=gpt-5-mini
-
-# OpenRouter
-HYBRID_CHAT_OPENAI_URL=https://openrouter.ai/api/v1
-HYBRID_CHAT_OPENAI_KEY=sk-or-...
-HYBRID_CHAT_OPENAI_MODEL=anthropic/claude-sonnet-5.5
-
-# Ollama on your own server (no key needed)
-HYBRID_CHAT_OPENAI_URL=http://localhost:11434/v1
-HYBRID_CHAT_OPENAI_MODEL=llama3.3
+```php
+'drivers' => [
+    'laravel-ai' => [
+        'models' => [
+            'anthropic' => 'claude-opus-5-5',
+            'openai' => 'gpt-5-mini',
+            'gemini' => 'gemini-3-flash',
+        ],
+        'max_tokens' => 4000,
+        'max_steps' => 5,        // model round trips per reply, tool calls included
+        'timeout' => 60,
+        'handoff_tool' => true,  // the agent may call request_human
+        'provider_options' => [
+            'anthropic' => ['output_config' => ['effort' => 'low']],
+        ],
+    ],
+],
 ```
 
-Groq, LM Studio, vLLM, Together and other services with an OpenAI-compatible `/chat/completions` endpoint work the same way.
+`provider_options` is sent as-is to each provider's API.
+
+| Provider | `.env` |
+|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| Gemini | `GEMINI_API_KEY` |
+| Groq | `GROQ_API_KEY` |
+| Mistral | `MISTRAL_API_KEY` |
+| DeepSeek | `DEEPSEEK_API_KEY` |
+| xAI | `XAI_API_KEY` |
+| OpenRouter | `OPENROUTER_API_KEY` |
+| Ollama (your own server) | `OLLAMA_URL=http://localhost:11434` |
+| Any OpenAI-compatible API (LM Studio, vLLM, Together, …) | `OPENAI_COMPATIBLE_URL`, `OPENAI_COMPATIBLE_API_KEY`, provider name `openai-compatible` |
+| Azure OpenAI, Amazon Bedrock, Cohere | see `config/ai.php` |
+
+In tests, fake the agent with laravel/ai's fakes:
+
+```php
+use Siberfx\ChatHybridAi\Ai\SupportAgent;
+
+SupportAgent::fake(['Yes, we ship to Turkey.']);
+```
 
 ### Your own agent (webhook)
 
@@ -262,7 +311,7 @@ For every visitor message, the package POSTs:
 
 ```json
 {
-  "conversation": { "id": "9b1e…", "visitor_name": "Vera", "visitor_email": "vera@example.com", "subject": null, "meta": { "plan": "pro" } },
+  "conversation": { "id": "9b1e…", "visitor_name": "Vera", "visitor_email": "vera@example.com", "visitor_id": "42", "subject": null, "meta": { "plan": "pro" } },
   "system_prompt": "You are a friendly customer support assistant…",
   "messages": [
     { "role": "user", "content": "Do you ship to Turkey?" }
@@ -276,7 +325,7 @@ The `X-Chat-Signature` header holds `hash_hmac('sha256', $rawBody, $secret)`. Yo
 { "reply": "Yes, in 3–5 days.", "handoff": false, "meta": {} }
 ```
 
-Return `"reply": null` to stay silent, or `"handoff": true` to call a human.
+Return `"reply": null` to stay silent, or `"handoff": true` to call a human. `visitor_id` is the verified id of a signed-in visitor (or `null`); it is the only visitor field your agent should trust.
 
 A receiver in Laravel:
 
@@ -378,6 +427,190 @@ HYBRID_CHAT_AI=false
 
 Every chat starts in `waiting`, and the package works as a regular human live chat.
 
+## Let the AI use your data
+
+The AI can answer questions from your database through **tools**: small, explicit functions you register, each doing one read. The AI decides when to call them; it never writes SQL or sees anything you didn't expose.
+
+> "Do you have red running shoes under 100?" → `search_products`
+> "Where is my order A-1042?" → `find_order`
+> "Is the code WELCOME10 still valid?" → `check_coupon`
+
+Tools need the `laravel-ai` driver. Register them in a service provider:
+
+```php
+// app/Providers/AppServiceProvider.php
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\Coupon;
+use Siberfx\ChatHybridAi\Ai\ChatContext;
+use Siberfx\ChatHybridAi\Ai\Tools\Check;
+use Siberfx\ChatHybridAi\Ai\Tools\FindRecord;
+use Siberfx\ChatHybridAi\Ai\Tools\SearchRecords;
+use Siberfx\ChatHybridAi\Facades\HybridChat;
+
+public function boot(): void
+{
+    HybridChat::tools([
+        // Site search
+        SearchRecords::model(Product::class)
+            ->in(['name', 'description'])
+            ->show(['name', 'price', 'url', 'in_stock'])
+            ->where(fn ($query) => $query->where('published', true))
+            ->limit(5),
+
+        // The visitor's own order
+        FindRecord::model(Order::class)
+            ->by('number')
+            ->ownedBy('user_id')          // signed-in visitors: only their own
+            ->confirmWith('email')        // guests: must also give the order's email
+            ->show(['number', 'status', 'shipped_at', 'tracking_url']),
+
+        // Any check you can write in PHP
+        Check::make(
+            'check_coupon',
+            'Check whether a discount code can be used right now.',
+            ['code' => 'string'],
+            fn (array $input) => Coupon::active()->where('code', $input['code'])->exists(),
+        ),
+    ]);
+}
+```
+
+Every reply gets these tools. To vary them per chat, pass a closure: `HybridChat::tools(fn (ChatContext $context) => $context->isIdentified() ? [...] : [...])`.
+
+### `SearchRecords`: search the site
+
+| Method | |
+|---|---|
+| `model(Product::class)` | the model to search |
+| `in([...])` | columns to search with `LIKE` (defaults to the `show` fields) |
+| `show([...])` | **the only fields returned to the AI**; accessors work too |
+| `where(fn ($query, ?ChatContext $context) => ...)` | limit the query; call it more than once to add more conditions |
+| `limit(5)` | maximum results (1–50) |
+| `usingScout()` | use Laravel Scout (`Product::search()`) instead of `LIKE` |
+| `as('search_products')`, `describedAs('...')` | the tool name and description the AI sees (sensible defaults) |
+
+### `FindRecord`: look up one record
+
+| Method | |
+|---|---|
+| `by('number')` | the column the visitor gives (e.g. an order number) |
+| `ownedBy('user_id')` | signed-in visitors only see records where this column is their id; guests are refused unless `confirmWith` is set |
+| `confirmWith('email', 'postcode')` | the visitor must also give these values, matching the record (case-insensitive) |
+| `show([...])`, `where(...)`, `as(...)`, `describedAs(...)` | as above |
+
+Without `ownedBy` or `confirmWith`, it is a public lookup, fine for something like a product SKU. A failed ownership or confirmation check answers the same as "not found", so it never reveals that a record exists.
+
+### `Check`: answers from your own code
+
+```php
+Check::make(
+    'delivery_estimate',
+    'Estimate delivery time to a postcode.',
+    ['postcode' => 'string', 'express' => '?boolean'],   // types: string, integer, number, boolean; "?" = optional
+    function (array $input, ?ChatContext $context) {
+        $days = Shipping::daysTo($input['postcode'], express: $input['express'] ?? false);
+
+        return $days === null
+            ? ['deliverable' => false]
+            : ['deliverable' => true, 'days' => $days];
+    },
+);
+```
+
+Return a bool, string, number or array. The visitor's verified id is `$context->visitorId()`, and their model is `$context->visitor()`.
+
+### Your own tool class
+
+Any [laravel/ai tool](https://laravel.com/docs/ai-sdk#tools) works. Use `ChatContext::current()` to know who you are talking to:
+
+```php
+namespace App\Ai\Tools;
+
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+use Siberfx\ChatHybridAi\Ai\ChatContext;
+
+class MySubscription implements Tool
+{
+    public function description(): string
+    {
+        return "Get the signed-in visitor's subscription plan and renewal date.";
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [];
+    }
+
+    public function handle(Request $request): string
+    {
+        $user = ChatContext::current()?->visitor();
+
+        if (! $user) {
+            return 'The visitor is not signed in. Ask them to sign in first.';
+        }
+
+        return json_encode([
+            'plan' => $user->subscription?->plan,
+            'renews_at' => $user->subscription?->renews_at?->toDateString(),
+        ]);
+    }
+}
+```
+
+Register tool classes by name in the config (they are resolved from the container), or as instances with `HybridChat::tools([...])`:
+
+```php
+'ai' => [
+    'tools' => [
+        App\Ai\Tools\MySubscription::class,
+    ],
+],
+```
+
+laravel/ai's ready-made tools work too:
+
+```php
+use App\Models\HelpArticle;
+use Laravel\Ai\Providers\Tools\WebSearch;
+use Laravel\Ai\Tools\SimilaritySearch;
+
+HybridChat::tools([
+    new WebSearch,                                                      // provider-side web search
+    SimilaritySearch::usingModel(HelpArticle::class, 'embedding'),     // answer from your docs (PostgreSQL + pgvector)
+]);
+```
+
+### Visitor identity
+
+A tool must know **who** it is talking to before it shows private data. The name, email and `meta` a visitor sends can't be trusted, because anyone can type `data-meta='{"user_id":"5"}'`. So the page that renders the chat signs the logged-in user's id with your app key:
+
+```blade
+<x-chat-hybrid-ai-bubble :identify="auth()->user()" />
+```
+
+```php
+// For your own widget or SPA, e.g. as an Inertia shared prop
+'chatIdentity' => fn () => $request->user() ? HybridChat::identity($request->user()) : null,
+```
+
+The API checks the signature and stores the id on the conversation as `visitor_id`. Forged or expired identities are ignored, so the visitor simply stays a guest. A guest who signs in mid-chat can send the identity with `PATCH conversations/{id}`. Once a chat has an identity, it can't be switched to another user.
+
+`$context->visitor()` loads the user with `models.visitor`, which defaults to your auth user model.
+
+### What admins see
+
+Every lookup is saved with the AI's reply. The inbox shows it under the message, e.g. `🔎 find_order(number: "A-1042")`, so you can always check where an answer came from. The admin API returns it as `tools` on each message. Visitors never see it.
+
+### Ground rules
+
+- Tools only read. Make sure your closures do too.
+- `show()` is an allowlist. Never return whole models: hidden attributes, costs and internal notes stay out.
+- Tool results are given to the AI as data, and its instructions tell it not to follow instructions found inside them.
+- `max_steps` (default 5) limits how many tool round trips one reply can take.
+
 ## Handoff to a human
 
 A conversation is in one of three modes:
@@ -385,7 +618,7 @@ A conversation is in one of three modes:
 | mode | who answers | how it gets there |
 |---|---|---|
 | `ai` | the AI agent | new chats (when AI is on); an admin clicks **Hand back to AI** |
-| `waiting` | nobody yet: it appears under **Needs a human** | the visitor clicks **Talk to a person**; the AI ends its reply with `[[HANDOFF]]` or returns `handoff: true`; the model refuses; or the AI errors |
+| `waiting` | nobody yet: it appears under **Needs a human** | the visitor clicks **Talk to a person**; the AI calls the `request_human` tool, ends its reply with `[[HANDOFF]]`, or (webhook) returns `handoff: true`; the model refuses; or the AI errors |
 | `human` | an admin | an admin clicks **Take over** or simply replies |
 
 When a chat enters `waiting`:
@@ -419,9 +652,9 @@ Base URL: `/api/chat`. The API is public and rate-limited (60 requests per minut
 |---|---|---|---|
 | GET | `widget.js` | | the bubble script |
 | GET | `config` | | widget settings |
-| POST | `conversations` | `name?`, `email?`, `subject?`, `message?`, `meta?` | `201` `{token, conversation, messages}` |
+| POST | `conversations` | `name?`, `email?`, `subject?`, `message?`, `meta?`, `identity?` | `201` `{token, conversation, messages}` |
 | GET | `conversations/{id}` | | `{conversation, messages}` |
-| PATCH | `conversations/{id}` | `name?`, `email?` | `{data: conversation}` |
+| PATCH | `conversations/{id}` | `name?`, `email?`, `identity?` | `{data: conversation}` |
 | GET | `conversations/{id}/messages` | `?after={lastMessageId}` | `{conversation, messages}` (up to 100) |
 | POST | `conversations/{id}/messages` | `body` | `201` `{data: message}` |
 | POST | `conversations/{id}/read` | | `204` |
@@ -454,6 +687,7 @@ curl -s -X POST $API/conversations \
     "mode": "ai",
     "visitor_name": "Vera",
     "visitor_email": "vera@example.com",
+    "identified": false,
     "created_at": "2026-10-19T12:00:00+00:00"
   },
   "messages": [
@@ -494,7 +728,7 @@ curl -s "${H[@]}" -X POST $API/conversations/$ID/close
 | `event` | for system messages: `handoff`, `joined`, `ai`, or `closed` |
 | `created_at` | ISO 8601 |
 
-**Conversation**: `id` (uuid), `status` (`open` or `closed`), `mode` (`ai`, `waiting`, or `human`), `visitor_name`, `visitor_email`, `created_at`.
+**Conversation**: `id` (uuid), `status` (`open` or `closed`), `mode` (`ai`, `waiting`, or `human`), `visitor_name`, `visitor_email`, `identified` (true when a signed identity was accepted), `created_at`.
 
 **Errors**: `404` (wrong token or unknown conversation), `422` (`{message, errors}` from validation), `429` (rate limited).
 
@@ -524,7 +758,7 @@ Both check the `viewHybridChat` gate. The token API is on when Sanctum is instal
 | POST | `conversations/{id}/transcript` | `emails[]?` (defaults to the visitor) |
 | DELETE | `conversations/{id}` | soft delete, `204` |
 
-An admin conversation also includes `subject`, `meta`, `assignee` (`{id, name}`), `latest_message`, `unread`, `last_message_at`, and `closed_at`.
+An admin conversation also includes `visitor_id` (the verified user id, or `null`), `subject`, `meta`, `assignee` (`{id, name}`), `latest_message`, `unread`, `last_message_at`, and `closed_at`. Admin messages also include `tools`: the lookups the AI made for that reply, as `[{name, arguments}]`.
 
 ### Tokens for admins
 
@@ -602,7 +836,7 @@ Methods: `config()`, `start(data)`, `show()`, `update({name, email})`, `messages
 ```js
 import { ChatSession } from './vendor/chat-hybrid-ai/client/hybrid-chat.js';
 
-const session = new ChatSession({ api: '/api/chat', name: 'Vera', meta: { plan: 'pro' } });
+const session = new ChatSession({ api: '/api/chat', name: 'Vera', meta: { plan: 'pro' }, identity: window.chatIdentity });
 
 session.subscribe((state) => render(state));
 await session.start();
@@ -621,17 +855,23 @@ The state object holds `ready`, `config`, `conversation`, `messages`, `open`, `u
 // resources/js/app.jsx
 import ChatWidget from './vendor/chat-hybrid-ai/react/ChatWidget.jsx';
 
-export default function Layout({ user, children }) {
+export default function Layout({ user, chatIdentity, children }) {
     return (
         <>
             {children}
-            <ChatWidget api="/api/chat" name={user?.name} email={user?.email} meta={{ plan: user?.plan ?? 'free' }} />
+            <ChatWidget
+                api="/api/chat"
+                name={user?.name}
+                email={user?.email}
+                identity={chatIdentity}
+                meta={{ plan: user?.plan ?? 'free' }}
+            />
         </>
     );
 }
 ```
 
-With Inertia, put it in your persistent layout so the chat survives page visits. In Next.js or another separate front end, use the full URL (`api="https://your-app.com/api/chat"`), mark the file `'use client'`, and allow CORS.
+`chatIdentity` comes from `HybridChat::identity($user)`; see [visitor identity](#visitor-identity). With Inertia, share it as a prop and put the widget in your persistent layout so the chat survives page visits. In Next.js or another separate front end, use the full URL (`api="https://your-app.com/api/chat"`), mark the file `'use client'`, and allow CORS.
 
 ### Your own UI with the hook
 
@@ -688,12 +928,12 @@ The hook returns the `ChatSession` state plus `send`, `setOpen`, `requestHuman`,
 <script setup>
 import ChatWidget from '@/vendor/chat-hybrid-ai/vue/ChatWidget.vue';
 
-defineProps({ user: Object });
+defineProps({ user: Object, chatIdentity: String });
 </script>
 
 <template>
     <slot />
-    <ChatWidget api="/api/chat" :name="user?.name" :email="user?.email" :meta="{ plan: user?.plan ?? 'free' }" />
+    <ChatWidget api="/api/chat" :name="user?.name" :email="user?.email" :identity="chatIdentity" :meta="{ plan: user?.plan ?? 'free' }" />
 </template>
 ```
 
@@ -930,6 +1170,7 @@ use Siberfx\ChatHybridAi\Models\Conversation;
 $chat = HybridChat::start([
     'visitor_name' => $user->name,
     'visitor_email' => $user->email,
+    'visitor_id' => $user->id,     // trusted: you set it on the server
     'subject' => "Order #{$order->number}",
     'meta' => ['order' => (string) $order->number, 'total' => (string) $order->total],
 ], 'I have a question about my order.');
@@ -950,7 +1191,9 @@ HybridChat::close($chat);
 HybridChat::reopen($chat);
 HybridChat::sendTranscript($chat, ['someone@example.com']);
 
-HybridChat::aiEnabled(); // bool
+HybridChat::aiEnabled();                 // bool
+HybridChat::identity($user);             // signed identity for a widget
+HybridChat::tools([...]);                // give the AI tools
 ```
 
 Query with the models and their scopes:
@@ -1028,7 +1271,8 @@ class ChatConversation extends BaseConversation
 'models' => [
     'conversation' => App\Models\ChatConversation::class,
     'message' => Siberfx\ChatHybridAi\Models\Message::class,
-    'agent' => App\Models\Staff::class, // defaults to auth.providers.users.model
+    'agent' => App\Models\Staff::class,     // admins; defaults to auth.providers.users.model
+    'visitor' => App\Models\Customer::class, // signed-in visitors; defaults to auth.providers.users.model
 ],
 
 'tables' => [
@@ -1049,14 +1293,11 @@ All settings are in [`config/chat-hybrid-ai.php`](config/chat-hybrid-ai.php). Th
 | `HYBRID_CHAT_WELCOME` | `Hi! How can we help you today?` | first message shown |
 | `HYBRID_CHAT_COLOR` | `#4f46e5` | brand colour |
 | `HYBRID_CHAT_AI` | `true` | AI answers first |
-| `HYBRID_CHAT_AI_DRIVER` | `anthropic` | `anthropic`, `openai`, `webhook`, `null`, or a custom name |
+| `HYBRID_CHAT_AI_DRIVER` | `laravel-ai` | `laravel-ai`, `webhook`, `null`, or a custom name |
+| `HYBRID_CHAT_AI_PROVIDERS` | `ai.default` | comma-separated laravel/ai providers, in failover order |
 | `HYBRID_CHAT_AI_QUEUE` | default queue | queue for AI replies |
 | `HYBRID_CHAT_AI_PROMPT` | built-in support prompt | system prompt |
-| `ANTHROPIC_API_KEY` | | Claude |
-| `HYBRID_CHAT_ANTHROPIC_MODEL` | `claude-opus-5-5` | Claude model |
-| `HYBRID_CHAT_OPENAI_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL |
-| `HYBRID_CHAT_OPENAI_KEY` | | |
-| `HYBRID_CHAT_OPENAI_MODEL` | | |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, … | | provider keys, read by `config/ai.php` |
 | `HYBRID_CHAT_WEBHOOK_URL` | | your agent |
 | `HYBRID_CHAT_WEBHOOK_SECRET` | | HMAC secret |
 | `HYBRID_CHAT_ADMIN_API` | on if Sanctum is installed | token admin API |
@@ -1065,7 +1306,7 @@ All settings are in [`config/chat-hybrid-ai.php`](config/chat-hybrid-ai.php). Th
 | `HYBRID_CHAT_TRANSCRIPT_TO` | | comma-separated emails on close |
 | `HYBRID_CHAT_BROADCAST` | `false` | broadcast `MessageCreated` |
 
-Config-only settings: `routes.*` (prefixes, middleware, `enabled`), `widget.position`, `widget.require_email`, `widget.poll_interval`, `widget.max_message_length`, `ai.history_limit`, `ai.handoff_marker`, `ai.drivers.*` (`max_tokens`, `effort`, `fallbacks`, `timeout`), `transcripts.queue`, `models.*`, and `tables.*`.
+Config-only settings: `routes.*` (prefixes, middleware, `enabled`), `widget.position`, `widget.require_email`, `widget.poll_interval`, `widget.max_message_length`, `ai.history_limit`, `ai.handoff_marker`, `ai.tools`, `ai.drivers.laravel-ai.*` (`models`, `max_tokens`, `max_steps`, `timeout`, `handoff_tool`, `provider_options`), `ai.drivers.webhook.timeout`, `identity.ttl`, `transcripts.queue`, `models.*`, and `tables.*`.
 
 To use only the PHP API and register your own routes, set `routes.enabled` to `false`.
 
@@ -1076,7 +1317,27 @@ To use only the PHP API and register your own routes, set `routes.enabled` to `f
 - **Transcripts**: visitors can only email their own address, so the API can't be used to send mail to other people.
 - **Admin**: every admin request, on the session or with a token, goes through your auth middleware and the `viewHybridChat` gate.
 - **Webhook**: verify `X-Chat-Signature` with `hash_equals` (see the examples above).
+- **AI tools**: read-only, allowlisted fields, scoped to the signed-in visitor or confirmed by a detail only the owner knows. The visitor's name, email and `meta` are never used to decide whose data to show.
+- **Visitor identity**: HMAC-signed with your app key, expiring (`identity.ttl`), and fixed to the conversation once accepted.
 - **Rendering**: message bodies are plain text. The bundled UIs render them as text; do the same in your own UI.
+
+## Upgrading from 1.x
+
+1. `composer require siberfx/chat-hybrid-ai:^2.0`, then `php artisan migrate` (adds `visitor_id` to conversations).
+2. The `anthropic` and `openai` drivers are gone; the `laravel-ai` driver replaces both and is the new default. Move your settings:
+
+| 1.x `.env` | 2.x |
+|---|---|
+| `HYBRID_CHAT_AI_DRIVER=anthropic` | `HYBRID_CHAT_AI_PROVIDERS=anthropic` (and remove the driver line) |
+| `HYBRID_CHAT_AI_DRIVER=openai` | `HYBRID_CHAT_AI_PROVIDERS=openai` (or `openrouter`, `groq`, `ollama`, `openai-compatible`, …) |
+| `ANTHROPIC_API_KEY` | unchanged |
+| `HYBRID_CHAT_ANTHROPIC_MODEL` | `ai.drivers.laravel-ai.models.anthropic` in the config |
+| `HYBRID_CHAT_OPENAI_KEY` / `_URL` / `_MODEL` | `OPENAI_API_KEY` / `OPENAI_URL` / `ai.drivers.laravel-ai.models.openai` |
+
+3. If you published `config/chat-hybrid-ai.php`, copy the new `ai.tools`, `ai.drivers.laravel-ai`, `identity` and `models.visitor` keys from the package config.
+4. The Anthropic server-side refusal fallback (`fallbacks`) is gone. Refusals still hand the chat to a human, and you can fail over to other providers with `HYBRID_CHAT_AI_PROVIDERS`.
+
+Webhook and custom drivers, the API, the widgets and the events are unchanged.
 
 ## Testing
 

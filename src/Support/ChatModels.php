@@ -22,6 +22,13 @@ class ChatModels
         return config('chat-hybrid-ai.models.message') ?: Message::class;
     }
 
+    /** The model of signed-in visitors (see VisitorIdentity). @return class-string<\Illuminate\Database\Eloquent\Model> */
+    public static function visitor(): string
+    {
+        return config('chat-hybrid-ai.models.visitor')
+            ?: config('auth.providers.users.model', 'App\Models\User');
+    }
+
     /** @return class-string<\Illuminate\Database\Eloquent\Model> */
     public static function agent(): string
     {
